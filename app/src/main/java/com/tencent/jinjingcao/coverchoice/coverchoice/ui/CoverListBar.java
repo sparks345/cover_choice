@@ -18,8 +18,6 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewGroup.LayoutParams;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -33,11 +31,14 @@ import com.tencent.jinjingcao.coverchoice.coverchoice.ui.TouchGesture.IMoveEvent
 
 public class CoverListBar extends FrameLayout implements IMoveEventListener {
 
+    private static final String TAG = "CoverListBar";
+
     public static final int FRAME_PRE_SECOND = 25;//fps
     public static final int KEY_FRAME_STEP = 30;//key frame step
     public static final int FRAME_STEP = 1000 * 30 / 25;//ms per key frame
     public static final int PRECISION_FRAME_STEP = FRAME_STEP * 2;
     public static final int MAX_FRAME_COUNT = 30000 / PRECISION_FRAME_STEP;//40;//max frame count -> 50
+    private static final int MAX_THUMB_CNT = 10;
 
     private final Context mContext;
 
@@ -55,6 +56,8 @@ public class CoverListBar extends FrameLayout implements IMoveEventListener {
     private int mThumbHeight = 100;
 
     private TouchGesture mTouchGesture;
+    private float mStartX;
+    private float mDiffX;
 
     public CoverListBar(@NonNull Context context) {
         super(context);
@@ -79,6 +82,18 @@ public class CoverListBar extends FrameLayout implements IMoveEventListener {
 
         mTouchGesture = new TouchGesture();
         mTouchGesture.setListener(this);
+
+        createListThumbs();
+    }
+
+    private void createListThumbs() {
+        for (int i = 0; i < MAX_THUMB_CNT; i++) {
+            ImageView iv = new ImageView(mContext);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) iv.getLayoutParams();
+            lp.weight = 1;
+            iv.setLayoutParams(lp);
+            mCoverList.addView(iv);
+        }
     }
 
     private void setMode(Mode mode) {
@@ -104,7 +119,7 @@ public class CoverListBar extends FrameLayout implements IMoveEventListener {
      */
     public Frame getFrameAtMs(long ms) {
         long key = ms / mStep;
-        int diff = ms % mStep <= 5 ? 0 : 1;
+        int diff = ms % mStep <= mStep / 2 ? 0 : 1;
         key += diff;
 
         Frame ret = mFrames.get(key);
@@ -119,7 +134,7 @@ public class CoverListBar extends FrameLayout implements IMoveEventListener {
     }
 
     private Frame createFrame(long key) {
-        return null;
+        return new Frame(key);
     }
 
 
@@ -130,10 +145,34 @@ public class CoverListBar extends FrameLayout implements IMoveEventListener {
 
     @Override
     public void onMove(float nLastX, MotionEvent event) {
-        float xPos = nLastX - mCoverChoice.getWidth() / 2;
-        if (xPos > 0 && xPos < getWidth() - mCoverChoice.getWidth()) {
-            mCoverChoice.setX(xPos);//setTranslationX(nLastX);
+//        Log.i(TAG, "onMove >> mCoverChoice.getX():" + mCoverChoice.getX() + ", mCoverChoice.getLeft():" + mCoverChoice.getLeft());
+
+        if (mStartX >= 0) {
+
+            // 在滑动条有效区域内才移动
+            float xPos = nLastX - mCoverChoice.getWidth() / 2 - mDiffX;
+            if (xPos >= 0 && xPos <= getWidth() - mCoverChoice.getWidth()) {
+
+                mCoverChoice.setX(xPos);//setTranslationX(nLastX);
+            }
         }
+    }
+
+    @Override
+    public void onStart(float mLastX, MotionEvent event) {
+        // 按住的是滚动条才移动
+        if (mLastX > mCoverChoice.getX() && mLastX < mCoverChoice.getX() + mCoverChoice.getWidth()) {
+            mStartX = mLastX;
+
+            float centerPosX = mCoverChoice.getX() + mCoverChoice.getWidth() / 2;
+            mDiffX = mStartX - centerPosX;
+//            Log.w(TAG, "onStart. diffX:" + mDiffX);
+        }
+    }
+
+    @Override
+    public void onEnd(float eLastX, MotionEvent event) {
+        mStartX = -1.0f;
     }
 
     public enum Mode {
@@ -155,20 +194,40 @@ public class CoverListBar extends FrameLayout implements IMoveEventListener {
             this.path = ABS_PATH.concat(File.separator).concat(String.valueOf(keyId));
         }
 
-        public void initThumb() {
+        public Drawable initThumb() {
             File file = new File(path);
             if (!file.exists()) {
                 Log.e(TAG, "initThumb. file not exists:" + path);
-                return;
+                generateBitmap(keyId, path);
+
+                if (!file.exists()) {
+                    Log.e(TAG, "initThumb error.");
+                    return null;
+                }
             }
 
-            BitmapDrawable drawable = new BitmapDrawable(file.getAbsolutePath());
-            Bitmap bitmap = drawable.getBitmap();
-            Bitmap.createScaledBitmap(bitmap, mThumbWidth, mThumbHeight, false);
+            if (thumb == null) {
+                BitmapDrawable drawable = new BitmapDrawable(file.getAbsolutePath());
+                Bitmap bitmap = drawable.getBitmap();
+                Bitmap.createScaledBitmap(bitmap, mThumbWidth, mThumbHeight, false);
 
-            thumb = new BitmapDrawable(bitmap);
+                // 缓存小图到内存
+                thumb = new BitmapDrawable(bitmap);
+                // 写大图文件
+                writeThumb(bitmap);
+            }
 
-            writeThumb(bitmap);
+            return thumb;
+        }
+
+        /**
+         * 生成特定帧的大图
+         *
+         * @param keyId key
+         * @param path  path
+         */
+        private void generateBitmap(long keyId, String path) {
+
         }
 
         private void writeThumb(Bitmap bitmap) {

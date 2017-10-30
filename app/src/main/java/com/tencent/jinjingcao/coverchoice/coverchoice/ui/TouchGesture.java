@@ -22,6 +22,16 @@ public class TouchGesture {
         public void onMove(float nLastX, MotionEvent event) {
 
         }
+
+        @Override
+        public void onStart(float mLastX, MotionEvent event) {
+
+        }
+
+        @Override
+        public void onEnd(float eLastX, MotionEvent event) {
+
+        }
     };
 
     public boolean onTouchEvent(MotionEvent event) {
@@ -31,6 +41,9 @@ public class TouchGesture {
                 // start point.
                 mLastX = event.getX();
                 mLastY = event.getY();
+
+                this.getListener().onStart(mLastX, event);
+
                 return true;
 
             case MotionEvent.ACTION_MOVE:
@@ -45,6 +58,8 @@ public class TouchGesture {
             case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_UP:
                 // end point.
+                float eLastX = event.getX();
+                this.getListener().onEnd(eLastX, event);
                 break;
         }
 
@@ -64,5 +79,9 @@ public class TouchGesture {
     public interface IMoveEventListener {
 
         void onMove(float nLastX, MotionEvent event);
+
+        void onStart(float mLastX, MotionEvent event);
+
+        void onEnd(float eLastX, MotionEvent event);
     }
 }
